@@ -84,6 +84,9 @@ team_t team = {
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
+//힙 공간의 주소를 저장하는 heap_listp 포인터 변수 선언
+char * heap_listp;
+
 /*
 * coalesce - combines current block with back and front blocks if empty
 */
@@ -200,9 +203,6 @@ int mm_init(void)
     //가장자리 조건? 메모리 블록을 할당하고 해제하는 과정에서 발생 가능한 특별한 상황들
     //프롤로그,에필로그 블록 없이 리스트의 맨 앞/끝에 있는 블록을 처리한다면
     //헤더, 풋터가 없거나 이전/다음 블록이 없는 상황이 발생해 seg fault가 생길 수 있음
-    
-    //힙 공간의 주소를 저장하는 heap_listp 포인터 변수 선언
-    char * heap_listp;
 
     //텅 빈 heap 공간을 할당받기 : 실패할 경우 -1 반환
     //-1을 반환하는 이유 : mdriver.c의 592를 보면
@@ -244,6 +244,49 @@ int mm_init(void)
     return 0;
 }
 
+/*
+* find_fit - Find appropriate memory block on heap that can save a data of a size of (asize) 
+*/
+
+static void *find_fit(size_t asize)
+{
+    //First Fit 방식
+    void *bp;
+
+    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+        {
+            return bp;
+        }
+    }
+
+    //할당 가능한 블럭이 없다면
+    return NULL;
+}
+
+/*
+* place - Place data on usable memory block
+*/
+static void place(void *bp, size_t asize)
+{
+    size_t csize = GET_SIZE(HDRP(bp));
+
+    if ((csize - asize) >= (2 * DSIZE))
+    {
+        PUT(HDRP(bp), PACK(asize, 1));
+        PUT(FTRP(bp), PACK(asize, 1));
+        bp = NEXT_BLKP(bp);
+        PUT(HDRP(bp), PACK(csize - asize, 0));
+        PUT(FTRP(bp), PACK(csize - asize, 0));
+    }
+    else
+    {
+        PUT(HDRP(bp), PACK(csize, 1));
+        PUT(FTRP(bp), PACK(csize, 1));
+    }
+}
+
 /* 
  * mm_malloc - Allocate a block by incrementing the brk pointer.
  *     Always allocate a block whose size is a multiple of the alignment.
@@ -266,19 +309,39 @@ void *mm_malloc(size_t size)
     if (size <= DSIZE)
         //헤더 + 푸터 크기 8 + 정렬 기준 8 크기 = 16을 할당
         asize = 2 * DSIZE;
+    
+    //요청받은 크기가 8바이트 이상인 경우
     else
+        //최종 할당 크기 : 오버헤드 바이트(헤더,푸터)를 추가하고 인접 8의 배수로 반올림
+        //DSIZE - 1을 더하는 이유 : 만약 8의 배수 크기를 요청한다면 내림해줘야 하기 때문에
+        //예) 8사이즈 크기를 할당할 때, DSIZE - 1이 아닌 DSIZE를 더한다면
+        //16바이트만 할당해야 할 것을 24바이트를 할당해버린다
         asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
 
+    //asize를 할당 가능한 블럭을 찾았을 경우
     if ((bp = find_fit(asize)) != NULL)
     {
+        //해당 블럭에 할당하기
         place(bp, asize);
+        //블럭 포인터 리턴
         return bp;
     }
 
+    //asize를 할당 가능한 블럭을 찾지 못한 경우
+
+    //추가 요청할 힙 메모리 공간
+    //힙을 확장할 때 최소한 한 페이지 크기(4KB)만큼 요청하면
+    //큰 단위로 메모리를 미리 확보해 여러 작은 메모리 요청을 처리할 수 있다
+    //그러니까 한 번 확장한 메모리로 여러 번의 메모리 할당 요청을 처리할 수 있게 된다
+    //asize가 4KB보다 클 수도 있으니 MAX 함수로 비교하는 것
     extendsize = MAX(asize, CHUNKSIZE);
+    //만약 힙 메모리 추가 할당 요청에 실패했다면
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
+        //NULL 포인터 반환
         return NULL;
+    //요청한 블럭을 새로운 가용 블록에 배치
     place(bp, asize);
+    //해당 블록 포인터 반환
     return bp;
 }
 
