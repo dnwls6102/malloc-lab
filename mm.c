@@ -86,6 +86,8 @@ team_t team = {
 
 //힙 공간의 주소를 저장하는 heap_listp 포인터 변수 선언
 char * heap_listp;
+//next fit 구현을 위한 current_listp 포인터 변수 선언
+char * current_listp;
 
 /*
 * coalesce - combines current block with back and front blocks if empty
@@ -250,17 +252,33 @@ int mm_init(void)
 
 static void *find_fit(size_t asize)
 {
-    //First Fit 방식
-    void *bp;
+    // //First Fit 방식
+    // void *bp;
+
+    // //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
+    // for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    // {
+    //     //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
+    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+    //     {
+    //         //해당 블럭의 포인터 반환
+    //         return bp;
+    //     }
+    // }
+
+    // //할당 가능한 블럭이 없다면
+    // return NULL;
+
+    //Next Fit 방식
 
     //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    for (current_listp = heap_listp; GET_SIZE(HDRP(current_listp)) > 0; current_listp = NEXT_BLKP(current_listp))
     {
         //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+        if (!GET_ALLOC(HDRP(current_listp)) && (asize <= GET_SIZE(HDRP(current_listp))))
         {
             //해당 블럭의 포인터 반환
-            return bp;
+            return current_listp;
         }
     }
 
@@ -391,25 +409,25 @@ void *mm_realloc(void *ptr, size_t size)
     //2. 그렇지 않다면 뒤쪽 블록이 가용하고, 현재 블록의 크기와 다음 블록의 크기를 더한 값이 size보다 크다면
     //뒤쪽 블록과 병합한 후 현재 블록의 포인터를 반환
     //앞쪽 블록과의 병합은 성능 저하를 고려해 진행하지 않음
-    if(GET_SIZE(HDRP(oldptr)) >= size)
-        return oldptr;
-    else if (!GET_ALLOC(NEXT_BLKP(oldptr)) && GET_SIZE(HDRP(oldptr)) + GET_SIZE(HDRP(NEXT_BLKP(oldptr))) >= size)
-    {
-        size_t temp_size = size;
-        //다음 블록의 크기를 size에 더해줌
-        temp_size += GET_SIZE(HDRP(NEXT_BLKP(oldptr)));
-        //우선 현재 블록의 헤더에 병합 이후의 size를 기록
-        PUT(HDRP(oldptr), PACK(temp_size, 0));
-        //FTRP의 구현 방식에 의해, 현재 블럭의 size 정보를 푸터가 아닌 헤더에서 가져오게 되고
-        //정상적으로 병합된 크기만큼 이동해 푸터를 초기화한다
-        PUT(FTRP(oldptr), PACK(temp_size, 0));
-        return oldptr;
-    }
+    // if(GET_SIZE(HDRP(oldptr)) >= size)
+    //     return oldptr;
+    // if (!GET_ALLOC(NEXT_BLKP(oldptr)) && GET_SIZE(HDRP(oldptr)) + GET_SIZE(HDRP(NEXT_BLKP(oldptr))) >= size)
+    // {
+    //     size_t temp_size = size;
+    //     //다음 블록의 크기를 size에 더해줌
+    //     temp_size += GET_SIZE(HDRP(NEXT_BLKP(oldptr)));
+    //     //우선 현재 블록의 헤더에 병합 이후의 size를 기록
+    //     PUT(HDRP(oldptr), PACK(temp_size, 0));
+    //     //FTRP의 구현 방식에 의해, 현재 블럭의 size 정보를 푸터가 아닌 헤더에서 가져오게 되고
+    //     //정상적으로 병합된 크기만큼 이동해 푸터를 초기화한다
+    //     PUT(FTRP(oldptr), PACK(temp_size, 0));
+    //     return oldptr;
+    // }
     //상기한 과정이 모두 이루어지지 않는다면
     //그냥 새로운 블록을 할당하고
     //새로운 블록에 기존 블록의 데이터를 전부 복사
     //복사가 완료되면 기존 블록은 해제
-    else
+    //else
     {
         size_t copySize;
         newptr = mm_malloc(size);
