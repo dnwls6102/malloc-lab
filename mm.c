@@ -154,6 +154,9 @@ static void *coalesce(void *bp)
         bp = PREV_BLKP(bp);
     }
 
+    //병합 이후 전역 포인터 업데이트하기
+    bp_for_next_fit = bp;
+
     //포인터 반환
     return bp;
 }
@@ -238,6 +241,8 @@ int mm_init(void)
     //그 다음에 프롤로그 블록의 헤더가 들어갔는데 이것도 1워드니까
     //WSIZE * 2 만큼을 더해준다
     heap_listp += (2 * WSIZE);
+    //next fit 구현을 위한 포인터 변수 bp_for_next_fit도 heap 메모리의 첫 번째 주소로 초기화
+    bp_for_next_fit = heap_listp;
 
     //CHUNKSIZE(현재는 4KB, 이를 블럭화하면 1024개의 블럭)만큼의 힙 메모리 공간 확보함
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
@@ -278,6 +283,7 @@ static void *find_fit(size_t asize)
     //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
     for (bp = NEXT_BLKP(bp_for_next_fit); GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
     {
+        //printf("Current Finding Address: %p\n", bp);
         //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
         {
@@ -287,15 +293,14 @@ static void *find_fit(size_t asize)
     }
 
     //next fit으로 했는데 찾지 못한 경우 : 다시 앞에서부터 탐색
-    bp = heap_listp;
-    while (bp < bp_for_next_fit)
+    for (bp = heap_listp; bp <= bp_for_next_fit; bp = NEXT_BLKP(bp))
     {
-        bp = NEXT_BLKP(bp);
-        if(!GET_ALLOC(HDRP(bp)) && GET_SIZE(HDRP(bp)) >= asize)
+        //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
         {
+            //해당 블럭의 포인터 반환
             return bp;
         }
-       
     }
 
     //할당 가능한 블럭이 없다면
@@ -322,6 +327,7 @@ static void place(void *bp, size_t asize)
         PUT(FTRP(bp), PACK(asize, 1));
         //place한 블럭의 남은 공간으로 넘어가기
         bp = NEXT_BLKP(bp);
+       
         //헤더와 푸터를 설정하고, 크기 및 가용 정보 저장
         PUT(HDRP(bp), PACK(csize - asize, 0));
         PUT(FTRP(bp), PACK(csize - asize, 0));
@@ -332,6 +338,7 @@ static void place(void *bp, size_t asize)
         //블럭 포인터의 헤더와 푸터에 크기 및 할당 정보 저장
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
+        
     }
 }
 
