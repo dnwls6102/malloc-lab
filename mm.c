@@ -257,7 +257,7 @@ int mm_init(void)
 
 static void *find_fit(size_t asize)
 {
-    //First Fit 방식
+    //First Fit 방식 : 46 + 33 = 79
     // void *bp;
 
     // //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
@@ -275,61 +275,61 @@ static void *find_fit(size_t asize)
     // //할당 가능한 블럭이 없다면
     // return NULL;
 
-    //Next Fit 방식
+    //Next Fit 방식 : 48 + 40 = 88
     //이전 검색이 종료된 지점에서 검색을 시작
     //이전 검색이 종료된 지점 : 힙에서 마지막으로 할당이 완료된 공간의 주소
 
-    // char * bp;
-    // //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
-    // for (bp = NEXT_BLKP(bp_for_next_fit); GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
-    // {
-    //     //printf("Current Finding Address: %p\n", bp);
-    //     //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
-    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
-    //     {
-    //         //해당 블럭의 포인터 반환
-    //         return bp;
-    //     }
-    // }
+    char * bp;
+    //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
+    for (bp = NEXT_BLKP(bp_for_next_fit); GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    {
+        //printf("Current Finding Address: %p\n", bp);
+        //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+        {
+            //해당 블럭의 포인터 반환
+            return bp;
+        }
+    }
 
-    // //next fit으로 했는데 찾지 못한 경우 : 다시 앞에서부터 탐색
-    // for (bp = heap_listp; bp <= bp_for_next_fit; bp = NEXT_BLKP(bp))
-    // {
-    //     //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
-    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
-    //     {
-    //         //해당 블럭의 포인터 반환
-    //         return bp;
-    //     }
-    // }
+    //next fit으로 했는데 찾지 못한 경우 : 다시 앞에서부터 탐색
+    for (bp = heap_listp; bp <= bp_for_next_fit; bp = NEXT_BLKP(bp))
+    {
+        //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+        {
+            //해당 블럭의 포인터 반환
+            return bp;
+        }
+    }
 
-    // //할당 가능한 블럭이 없다면
-    // return NULL;
+    //할당 가능한 블럭이 없다면
+    return NULL;
 
     //Best Fit 방식 : 50 + 30 = 80
     //모든 블럭을 탐색해
     //할당 가능한 가장 작은 블럭을 찾는다
 
-    char * bp = NULL;
-    for (char * cur = heap_listp; GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
-    {
-        //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
-        if(!GET_ALLOC(HDRP(cur)) && GET_SIZE(HDRP(cur)) >= asize)
-        {
-            //만약 bp에 처음으로 값이 할당되는 경우
-            if (bp == NULL)
-                bp = cur;
-            //비교할 최적 값이 있을 경우
-            else
-            {
-                //만약 cur의 사이즈가 bp보다 작다면
-                if (GET_SIZE(HDRP(cur)) < GET_SIZE(HDRP(bp)))
-                    bp = cur; //값 업데이트
-            }
-        }
-    }
+    // char * bp = NULL;
+    // for (char * cur = heap_listp; GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
+    // {
+    //     //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
+    //     if(!GET_ALLOC(HDRP(cur)) && GET_SIZE(HDRP(cur)) >= asize)
+    //     {
+    //         //만약 bp에 처음으로 값이 할당되는 경우
+    //         if (bp == NULL)
+    //             bp = cur;
+    //         //비교할 최적 값이 있을 경우
+    //         else
+    //         {
+    //             //만약 cur의 사이즈가 bp보다 작다면
+    //             if (GET_SIZE(HDRP(cur)) < GET_SIZE(HDRP(bp)))
+    //                 bp = cur; //값 업데이트
+    //         }
+    //     }
+    // }
 
-    return bp;
+    // return bp;
 }
 
 /*
