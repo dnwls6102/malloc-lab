@@ -86,8 +86,8 @@ team_t team = {
 
 //힙 공간의 주소를 저장하는 heap_listp 포인터 변수 선언
 char * heap_listp;
-//next fit 구현을 위한 current_listp 포인터 변수 선언
-char * current_listp;
+//next fit 구현을 위한 bp_for_next_fit 포인터 변수 선언
+char * bp_for_next_fit;
 
 /*
 * coalesce - combines current block with back and front blocks if empty
@@ -252,7 +252,7 @@ int mm_init(void)
 
 static void *find_fit(size_t asize)
 {
-    // //First Fit 방식
+    //First Fit 방식
     // void *bp;
 
     // //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
@@ -261,6 +261,7 @@ static void *find_fit(size_t asize)
     //     //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
     //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
     //     {
+    //         //printf("Found appropriate memory address : %p\n", bp);
     //         //해당 블럭의 포인터 반환
     //         return bp;
     //     }
@@ -270,16 +271,31 @@ static void *find_fit(size_t asize)
     // return NULL;
 
     //Next Fit 방식
+    //이전 검색이 종료된 지점에서 검색을 시작
+    //이전 검색이 종료된 지점 : 힙에서 마지막으로 할당이 완료된 공간의 주소
 
+    char * bp;
     //heap의 첫 번째 블럭부터 에필로그 블럭 전까지 
-    for (current_listp = heap_listp; GET_SIZE(HDRP(current_listp)) > 0; current_listp = NEXT_BLKP(current_listp))
+    for (bp = NEXT_BLKP(bp_for_next_fit); GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
     {
         //헤더를 살펴봤는데 할당이 되어있지 않고, asize보다 크기가 큰 블럭을 발견하면
-        if (!GET_ALLOC(HDRP(current_listp)) && (asize <= GET_SIZE(HDRP(current_listp))))
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
         {
             //해당 블럭의 포인터 반환
-            return current_listp;
+            return bp;
         }
+    }
+
+    //next fit으로 했는데 찾지 못한 경우 : 다시 앞에서부터 탐색
+    bp = heap_listp;
+    while (bp < bp_for_next_fit)
+    {
+        bp = NEXT_BLKP(bp);
+        if(!GET_ALLOC(HDRP(bp)) && GET_SIZE(HDRP(bp)) >= asize)
+        {
+            return bp;
+        }
+       
     }
 
     //할당 가능한 블럭이 없다면
@@ -355,6 +371,10 @@ void *mm_malloc(size_t size)
     {
         //해당 블럭에 할당하기
         place(bp, asize);
+
+        //next fit으로 구현한 경우 : current_listp에 bp 저장
+        //current_listp = bp;
+
         //블럭 포인터 리턴
         return bp;
     }
@@ -373,6 +393,10 @@ void *mm_malloc(size_t size)
         return NULL;
     //요청한 블럭을 새로운 가용 블록에 배치
     place(bp, asize);
+
+    //next fit 구현을 위한 값 변경
+    bp_for_next_fit = bp;
+
     //해당 블록 포인터 반환
     return bp;
 }
@@ -409,32 +433,35 @@ void *mm_realloc(void *ptr, size_t size)
     //2. 그렇지 않다면 뒤쪽 블록이 가용하고, 현재 블록의 크기와 다음 블록의 크기를 더한 값이 size보다 크다면
     //뒤쪽 블록과 병합한 후 현재 블록의 포인터를 반환
     //앞쪽 블록과의 병합은 성능 저하를 고려해 진행하지 않음
-    // if(GET_SIZE(HDRP(oldptr)) >= size)
-    //     return oldptr;
-    // if (!GET_ALLOC(NEXT_BLKP(oldptr)) && GET_SIZE(HDRP(oldptr)) + GET_SIZE(HDRP(NEXT_BLKP(oldptr))) >= size)
-    // {
-    //     size_t temp_size = size;
-    //     //다음 블록의 크기를 size에 더해줌
-    //     temp_size += GET_SIZE(HDRP(NEXT_BLKP(oldptr)));
-    //     //우선 현재 블록의 헤더에 병합 이후의 size를 기록
-    //     PUT(HDRP(oldptr), PACK(temp_size, 0));
-    //     //FTRP의 구현 방식에 의해, 현재 블럭의 size 정보를 푸터가 아닌 헤더에서 가져오게 되고
-    //     //정상적으로 병합된 크기만큼 이동해 푸터를 초기화한다
-    //     PUT(FTRP(oldptr), PACK(temp_size, 0));
-    //     return oldptr;
-    // }
+    if(GET_SIZE(HDRP(oldptr)) >= size + DSIZE)
+        return oldptr;
+    
+    else if (!GET_ALLOC(HDRP(NEXT_BLKP(oldptr))) && GET_SIZE(HDRP(oldptr)) + GET_SIZE(HDRP(NEXT_BLKP(oldptr))) >= size + DSIZE)
+    {
+        //printf("Condition 1 : oldptr size : %d\n", GET_SIZE(HDRP(oldptr)));
+        size_t temp_size = GET_SIZE(HDRP(oldptr));
+        //다음 블록의 크기를 size에 더해줌
+        temp_size += GET_SIZE(HDRP(NEXT_BLKP(oldptr)));
+        //우선 현재 블록의 헤더에 병합 이후의 size를 기록
+        PUT(HDRP(oldptr), PACK(temp_size, 1));
+        //FTRP의 구현 방식에 의해, 현재 블럭의 size 정보를 푸터가 아닌 헤더에서 가져오게 되고
+        //정상적으로 병합된 크기만큼 이동해 푸터를 초기화한다
+        PUT(FTRP(oldptr), PACK(temp_size, 1));
+        //printf("Condition 1 : after realloc : %d\n", GET_SIZE(HDRP(oldptr)));
+        return oldptr;
+    }
     //상기한 과정이 모두 이루어지지 않는다면
     //그냥 새로운 블록을 할당하고
     //새로운 블록에 기존 블록의 데이터를 전부 복사
     //복사가 완료되면 기존 블록은 해제
-    //else
+    else
     {
         size_t copySize;
         newptr = mm_malloc(size);
         //만약 새로운 메모리 할당에 실패했다면 NULL 반환
         if (newptr == NULL)
             return NULL;
-        copySize = GET_SIZE(HDRP(oldptr)) - DSIZE;
+        copySize = GET_SIZE(HDRP(oldptr));
         if (size < copySize)
             copySize = size;
         memcpy(newptr, oldptr, copySize);
