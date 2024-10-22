@@ -183,6 +183,7 @@ static void *extend_heap(size_t words)
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
+    //printf("New Epilogue Block : %p, Heap End : %p\n", HDRP(NEXT_BLKP(bp)), NEXT_BLKP(bp));
     
     //앞의 블록이 가용한 상태면 병합하기
     return coalesce(bp);
@@ -241,6 +242,7 @@ int mm_init(void)
     //그 다음에 프롤로그 블록의 헤더가 들어갔는데 이것도 1워드니까
     //WSIZE * 2 만큼을 더해준다
     heap_listp += (2 * WSIZE);
+    //printf("Heap INIT : %p\n", heap_listp);
     //next fit 구현을 위한 포인터 변수 bp_for_next_fit도 heap 메모리의 첫 번째 주소로 초기화
     bp_for_next_fit = heap_listp;
 
@@ -403,9 +405,7 @@ void *mm_malloc(size_t size)
     {
         //해당 블럭에 할당하기
         place(bp, asize);
-
-        //next fit으로 구현한 경우 : current_listp에 bp 저장
-        //current_listp = bp;
+        //printf("Memory Allocated : %p, size : %d\n", bp, GET_SIZE(HDRP(bp)));
 
         //블럭 포인터 리턴
         return bp;
@@ -438,6 +438,7 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
+    //printf("Freeing Block : %p, size : %d\n", ptr, GET_SIZE(HDRP(ptr)));
     //매개변수로 입력받은 포인터 블록의 크기를 측정한다
     //해당 블록의 헤더를 통해 크기를 알아내기
     size_t size = GET_SIZE(HDRP(ptr));
@@ -460,6 +461,11 @@ void *mm_realloc(void *ptr, size_t size)
     //재할당한 블록의 포인터
     void *newptr;
 
+    //디버깅용 printf
+    // printf("oldptr : %p, size : %d, Allocated : %d\n", oldptr, GET_SIZE(HDRP(oldptr)), GET_ALLOC(HDRP(oldptr)));
+    // printf("nextptr : %p, size : %d, Allocated : %d\n", NEXT_BLKP(oldptr), GET_SIZE(HDRP(NEXT_BLKP(oldptr))), GET_ALLOC(HDRP(NEXT_BLKP(oldptr))));
+    // printf("realloc size : %d\n", size);
+
     //새로운 블럭을 할당하기 전에
     //1. 굳이 재할당을 하지 않아도 될 정도로 현재 블록이 큰지 : 이 경우 기존 포인터 그대로 반환
     //2. 그렇지 않다면 뒤쪽 블록이 가용하고, 현재 블록의 크기와 다음 블록의 크기를 더한 값이 size보다 크다면
@@ -468,9 +474,9 @@ void *mm_realloc(void *ptr, size_t size)
     if(GET_SIZE(HDRP(oldptr)) >= size + DSIZE)
         return oldptr;
     
+    //단 한번도 할당되지 않은, 순수한 빈 힙 메모리 공간은 하나의 큰 가용 블럭으로 취급한다
     else if (!GET_ALLOC(HDRP(NEXT_BLKP(oldptr))) && GET_SIZE(HDRP(oldptr)) + GET_SIZE(HDRP(NEXT_BLKP(oldptr))) >= size + DSIZE)
     {
-        //printf("Condition 1 : oldptr size : %d\n", GET_SIZE(HDRP(oldptr)));
         size_t temp_size = GET_SIZE(HDRP(oldptr));
         //다음 블록의 크기를 size에 더해줌
         temp_size += GET_SIZE(HDRP(NEXT_BLKP(oldptr)));
@@ -479,7 +485,10 @@ void *mm_realloc(void *ptr, size_t size)
         //FTRP의 구현 방식에 의해, 현재 블럭의 size 정보를 푸터가 아닌 헤더에서 가져오게 되고
         //정상적으로 병합된 크기만큼 이동해 푸터를 초기화한다
         PUT(FTRP(oldptr), PACK(temp_size, 1));
-        //printf("Condition 1 : after realloc : %d\n", GET_SIZE(HDRP(oldptr)));
+
+        //디버깅용 printf
+        //printf("Condition 2 case : %p, size : %d\n", oldptr, GET_SIZE(HDRP(oldptr)));
+
         return oldptr;
     }
     //상기한 과정이 모두 이루어지지 않는다면
@@ -493,10 +502,22 @@ void *mm_realloc(void *ptr, size_t size)
         //만약 새로운 메모리 할당에 실패했다면 NULL 반환
         if (newptr == NULL)
             return NULL;
+        //DSIZE를 빼주는 이유 : 빼주지 않으면 oldptr의 푸터와, oldptr의 다음 블록의 헤더가 함께 포함되어 memcpy됨
+        //이에 대한 증명 : 하단의 주석 처리된 printf 참고
         copySize = GET_SIZE(HDRP(oldptr)) - DSIZE;
+
+        //이미 newptr에 size만큼의 공간을 할당했기 때문에
+        //copysize가 size보다 크면 오류가 발생함
+        //애초에 그렇게 만든 test case가 잘못된거긴 하지만
+        //아무튼 이 조건문을 통해 오류를 방지함
         if (size < copySize)
             copySize = size;
         memcpy(newptr, oldptr, copySize);
+        // printf("Old Block's address : %p, size : %d\n", oldptr, GET_SIZE(HDRP(oldptr)));
+        // printf("Copied Block's address : %p, size : %d\n", newptr, GET_SIZE(HDRP(newptr)));
+        // printf("Copied Block's Garbage Footer : %p, size : %d\n", newptr + (GET_SIZE(HDRP(oldptr)) - DSIZE), GET_SIZE(newptr + (GET_SIZE(HDRP(oldptr)) - DSIZE)));
+        // printf("Copied Block's Garbage Header : %p, size : %d\n", newptr + (GET_SIZE(HDRP(oldptr)) - WSIZE), GET_SIZE(newptr + (GET_SIZE(HDRP(oldptr)) - WSIZE)));
+        // printf("Copied Block's Actual Footer : %p, size : %d\n", FTRP(newptr), GET_SIZE(FTRP(newptr)));
         mm_free(oldptr);
         return newptr;
     }
