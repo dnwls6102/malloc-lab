@@ -493,7 +493,7 @@ void *mm_realloc(void *ptr, size_t size)
         //만약 새로운 메모리 할당에 실패했다면 NULL 반환
         if (newptr == NULL)
             return NULL;
-        copySize = GET_SIZE(HDRP(oldptr));
+        copySize = GET_SIZE(HDRP(oldptr)) - DSIZE;
         if (size < copySize)
             copySize = size;
         memcpy(newptr, oldptr, copySize);
