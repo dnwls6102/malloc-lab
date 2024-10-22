@@ -478,6 +478,20 @@ void *mm_realloc(void *ptr, size_t size)
     else if (!GET_ALLOC(HDRP(NEXT_BLKP(oldptr))) && GET_SIZE(HDRP(oldptr)) + GET_SIZE(HDRP(NEXT_BLKP(oldptr))) >= size + DSIZE)
     {
         size_t temp_size = GET_SIZE(HDRP(oldptr));
+        //남아있는 블럭이 순수한 힙 전체 공간이라면(혹은 지나칠 정도로 공간이 많이 남아있다면)
+        //그냥 요구받은 size에서 oldptr의 size만큼 뺀 값만 확장하기
+        //결과 : 동일한 수준의 성능 (48 + 40 = 88)
+        // if (size - GET_SIZE(HDRP(oldptr)) < GET_SIZE(HDRP(NEXT_BLKP(oldptr))))
+        // {
+        //     PUT(FTRP(NEXT_BLKP(oldptr)), PACK(GET_SIZE(HDRP(NEXT_BLKP(oldptr))) - (size - GET_SIZE(HDRP(oldptr)) + DSIZE), 0));
+        //     PUT(FTRP(NEXT_BLKP(oldptr)) + WSIZE - GET_SIZE(FTRP(NEXT_BLKP(oldptr))), PACK(GET_SIZE(FTRP(NEXT_BLKP(oldptr))), 0));
+        //     temp_size += (size - GET_SIZE(HDRP(oldptr)) + DSIZE);
+        //     PUT(HDRP(oldptr), PACK(temp_size, 1));
+        //     PUT(FTRP(oldptr), PACK(temp_size, 1));
+        //     PUT(HDRP(oldptr + temp_size), PACK(GET_SIZE(FTRP(NEXT_BLKP(oldptr))), 0));
+
+        //     return oldptr;
+        // }
         //다음 블록의 크기를 size에 더해줌
         temp_size += GET_SIZE(HDRP(NEXT_BLKP(oldptr)));
         //우선 현재 블록의 헤더에 병합 이후의 size를 기록
